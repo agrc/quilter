@@ -17,7 +17,7 @@ import argparse
 from pathlib import Path
 
 import requests
-from osgeo import gdal, ogr, osr
+from osgeo import gdal, osr
 
 
 #: Progress bar for download
@@ -90,16 +90,24 @@ def read_csv(csv_path):
 
 
 def download_links(link_list, save_dir):
+    '''
+    Downloads links from link_list into save_dir. link_list is list of two-tuples: (format, link)
+    '''
     d_prog = 0
-    for link in link_list:
+    links = [l[1] for l in link_list]  #: Filter out the links from the format codes
+    for link in links:
         fname = link.split('/')[-1]
         d_prog += 1
-        print('Downloading {}, {} of {}'.format(fname, d_prog, str(len(link_list))))
+        print('Downloading {}, {} of {}'.format(fname, d_prog, str(len(links))))
         outpath = os.path.join(save_dir, fname)
         download(link, outpath)
 
 
 def extract_files(source_dir, unzip_dir):
+    '''
+    Extracts any .zip files from source_dir into unzip_dir. The contents of each .zip are placed in
+    unzip_dir; no subfolders are created.
+    '''
     zip_list = []
     z_prog = 0
     for dir_name, subdir_list, file_list in os.walk(source_dir):
@@ -115,6 +123,9 @@ def extract_files(source_dir, unzip_dir):
 
 
 def copy_extracted_files(extensions, source_dir, target_dir):
+    '''
+    Copies files with given extensions from source_dir to target_dir
+    '''
     extract_list = []
     extract_prog = 0
     for dir_name, subdir_list, file_list in os.walk(source_dir):
@@ -130,7 +141,11 @@ def copy_extracted_files(extensions, source_dir, target_dir):
 
 
 def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs):
-
+    '''
+    Merges any rasters (defined by comparing file names to extensions) in raster_folder to output_location by
+    creating a vrt file at temp_vrt_path. If crs is specified, it reprojects the merged raster via gdal.Warp();
+    otherwise it translates the vrt to .tif via gdal.Translate(). crs must be in form EPSG:xxxx or ESRI:xxxx.
+    '''
     #: Merge files by building VRT
     vrt_list = []
     for dir_name, subdir_list, file_list in os.walk(raster_folder):
@@ -156,7 +171,7 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
             if 'YCbCr' in sample_metadata['COMPRESSION']:
                 creation_opts.append('photometric=ycbcr')
                 gdal.SetConfigOption('PHOTOMETRIC_OVERVIEW', 'YCBCR')
-        
+
         sample_dataset = None
 
     #: Project if desired
@@ -191,13 +206,13 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
         dataset = None
 
 
-def vector_merge(shp_folder, output_location):
+def vector_merge(shp_folder, output_location, crs):
     '''
-    Merges all shapefiles in shp_folder and saves to output_location.
+    Merges all shapefiles (files with .shp extension) in shp_folder and saves to output_location. If crs is
+    specified, it reprojects the output file to crs, which must be in form EPSG:xxxx or ESRI:xxxx.
     '''
-    
-    shp_list = []
 
+    #: Set ogrmerge.py path
     #: Assumes gdal installed via Conda; unknown if this works with OSG4W, qgis, etc.
     #: Really, if you're doing GDAL in python, you should use conda. Seriously.
     gdal_path = Path(inspect.getfile(gdal))
@@ -213,17 +228,27 @@ def vector_merge(shp_folder, output_location):
     if not os.path.exists(merge_path):
         raise FileNotFoundError('ogrmerge.py not found where expected. Did you install GDAL from conda-forge?')
 
-    shp_args = ['python', merge_path, '-o', output_location]
+    shp_args = ['python', str(merge_path), '-o', output_location]
 
     for dir_name, subdir_list, file_list in os.walk(shp_folder):
         for fname in file_list:
             if str.endswith(fname, '.shp'):
-                shp_list.append(os.path.join(dir_name, fname))
+                shp_args.append(os.path.join(dir_name, fname))
 
+    shp_args.append('-single')
+
+    if crs:
+        shp_args.append('-t_srs')
+        shp_args.append(crs)
+
+    print('\nMerging Shapefiles...')
     subprocess.run(shp_args)
 
 
 def main():
+    '''
+    Entry point for quilter.py.
+    '''
     #: User Input:
     #: csv file
     #: destination folder
@@ -252,14 +277,14 @@ def main():
     #: Set defaults
     merge = False
     project = False
-    delete = False
+    delete_temp = False
 
     outfolder = args.destination
     csv_file = args.csv
     if args.name:
         final_name = args.name
         merge = True
-    
+
     if args.crs:
         projection = args.crs
         # project = True
@@ -284,8 +309,6 @@ def main():
 
         #: Do these checks now so that they don't download files only to
         #: bomb out at the end
-
-
         #: Projection requires merging
         if project and not merge:
             raise ValueError('Must specify merged file name with -m.')
@@ -305,15 +328,13 @@ def main():
                 reference = None
 
         #: TODO: updated csv format from raster.utah.gov app
-        #: TODO: Framework for handling different csv formats (which column
-        #:       the line is in)
+        #: TODO: Framework for handling different csv formats (which columns the format and link are in)
 
         #: Create list of links
         print('\nReading CSV...')
         dl_links = read_csv(csv_file)
 
-
-        #: TODO: Test this check
+        #: Set raster flag based on field in CSV
         if "SHP" in dl_links[0]:
             raster = False
         else:
@@ -343,23 +364,21 @@ def main():
         extract_files(dl_folder, unzip_folder)
 
         #: Copy out all relevant files to output dir
-        print('\nCopying extracted files...')
+        print('\nCopying extracted files to {}...'.format(extract_folder))
         os.mkdir(extract_folder)
         copy_extracted_files(ext_list, unzip_folder, extract_folder)
 
-        #: If we've gotten this far, we can go ahead and delete the downloaded zips when we're finished.
-        delete = True
+        #: If we've gotten this far, we can go ahead and delete the temp directory (downloaded zips, initial
+        #: extracted files) when we're finished.
+        delete_temp = True
 
         #: Raster merging
         if merge and raster:
             raster_merge(extract_folder, raster_outpath, vrt_path, raster_exts, projection)
 
-        #: TODO: vector reprojection?
-        #: Check out ogr2ogr, may have to subprocess
-
         #: Shapefile merging
         elif merge and not raster:
-            vector_merge(extract_folder, vector_outpath)
+            vector_merge(extract_folder, vector_outpath, projection)
 
 
 
@@ -371,16 +390,16 @@ def main():
             )
         print('\nPython error message:')
         print(e)
-        delete = True
+        delete_temp = True
 
     except RuntimeError as e:
         print("\n===========\nDON'T PANIC\n===========")
         if 'proj_create_from_database' in e.args[0]:
             print('Projection code not recognized. Must be a valid EPSG or ESRI code in the format EPSG:xxxx or ESRI:xxxx.')
-            delete = True
+            delete_temp = True
         else:
             print('Whoops, something went wrong. Any finished downloads have been left in {}'.format(temp_dir))
-            delete = False
+            delete_temp = False
         print('\nPython error message:')
         print(e)
 
@@ -389,11 +408,11 @@ def main():
         print('Whoops, something went wrong. Any finished downloads have been left in {}'.format(temp_dir))
         print('\nPython error message:')
         print(e)
-        delete = False
+        delete_temp = False
 
     finally:
         #: Clean up temp directory
-        if delete:
+        if delete_temp:
             shutil.rmtree(temp_dir)
 
 if __name__ == '__main__':
