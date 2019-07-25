@@ -230,13 +230,16 @@ def vector_merge(shp_folder, output_location, crs):
                 shp_args.append(os.path.join(dir_name, fname))
 
     shp_args.append('-single')
-    shp_args.append('-f')
-    shp_args.append('ESRI Shapefile')
+    # shp_args.append('-f')
+    # shp_args.append('ESRI Shapefile')
 
     if crs:
         shp_args.append('-t_srs')
         shp_args.append(crs)
 
+    #: GDAL-provided ogrmerge.py relies on NOT using exceptions in roughly line 338, where it checks if the file is open or not.
+    osr.DontUseExceptions()
+    gdal.DontUseExceptions()
     print('\nMerging Shapefiles...')
     ogrmerge.process(shp_args, progress=gdal_progress_callback)
 
