@@ -19,6 +19,7 @@ from pathlib import Path
 import requests
 from osgeo import gdal, osr
 
+import ogrmerge
 
 #: Progress bar for download
 #: modified from https://sumit-ghosh.com/articles/python-download-progress-bar/
@@ -219,23 +220,9 @@ def vector_merge(shp_folder, output_location, crs):
     specified, it reprojects the output file to crs, which must be in form EPSG:xxxx or ESRI:xxxx.
     '''
 
-    #: Set ogrmerge.py path
-    #: Assumes gdal installed via Conda; unknown if this works with OSG4W, qgis, etc.
-    #: Really, if you're doing GDAL in python, you should use conda. Seriously.
-    gdal_path = Path(inspect.getfile(gdal))
-    if r'Program Files\ArcGIS' in str(gdal_path):
-        raise RuntimeError(
-            'The GDAL environment bundled with ArcGIS Pro does not provide the script necessary for merging ' +
-            'shapefiles. Recommend installing latest GDAL from the conda-forge channel: conda install -c ' +
-            'conda-forge gdal.'
-        )
-    else:
-        merge_path = gdal_path.parents[3] / 'Scripts' / 'ogrmerge.py'
-
-    if not os.path.exists(merge_path):
-        raise FileNotFoundError('ogrmerge.py not found where expected. Did you install GDAL from conda-forge?')
-
-    shp_args = ['python', str(merge_path), '-o', output_location]
+    #: ogrmerge expects a list of arguments in form [-switch, value, -switch, value, ...]
+    #: Args are same as if calling from command line
+    shp_args = ['-o', output_location]
 
     for dir_name, subdir_list, file_list in os.walk(shp_folder):
         for fname in file_list:
@@ -243,13 +230,15 @@ def vector_merge(shp_folder, output_location, crs):
                 shp_args.append(os.path.join(dir_name, fname))
 
     shp_args.append('-single')
+    shp_args.append('-f')
+    shp_args.append('ESRI Shapefile')
 
     if crs:
         shp_args.append('-t_srs')
         shp_args.append(crs)
 
     print('\nMerging Shapefiles...')
-    subprocess.run(shp_args)
+    ogrmerge.process(shp_args, progress=gdal_progress_callback)
 
 
 def main():
