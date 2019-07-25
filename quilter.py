@@ -237,7 +237,7 @@ def vector_merge(shp_folder, output_location, crs):
         shp_args.append('-t_srs')
         shp_args.append(crs)
 
-    #: GDAL-provided ogrmerge.py relies on NOT using exceptions in roughly line 338, where it checks if the file is open or not.
+    #: GDAL-provided ogrmerge.py relies on NOT using exceptions in roughly line 338, where it checks if the destination file exists.
     osr.DontUseExceptions()
     gdal.DontUseExceptions()
     print('\nMerging Shapefiles...')
