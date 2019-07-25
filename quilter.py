@@ -79,6 +79,13 @@ def gdal_progress_callback(complete, message, unknown):
 
 
 def read_csv(csv_path):
+    '''
+    Reads in a csv of links. Expects similar format to USGS Nat'l Map CSV, specifically:
+    Item 7 (index 6): The actual link, beginning with 'http' (also captures 'https,' as it begins with 'http')
+    Item 3 (index 2): The format of the selected files
+    
+    Returns: list of two-tuples: (format, link)
+    '''
     links = []
     with open(csv_path, 'r') as cfile:
         reader = csv.reader(cfile)
@@ -143,7 +150,7 @@ def copy_extracted_files(extensions, source_dir, target_dir):
 def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs):
     '''
     Merges any rasters (defined by comparing file names to extensions) in raster_folder to output_location by
-    creating a vrt file at temp_vrt_path. If crs is specified, it reprojects the merged raster via gdal.Warp();
+    creating a vrt file at temp_vrt_path. If crs is specified, it reprojects the merged vrt via gdal.Warp();
     otherwise it translates the vrt to .tif via gdal.Translate(). crs must be in form EPSG:xxxx or ESRI:xxxx.
     '''
     #: Merge files by building VRT
@@ -314,6 +321,7 @@ def main():
             raise ValueError('Must specify merged file name with -m.')
 
         #: Checks if gdal installed, proper projection code
+        #: Will raise an error if gdal is not installed or CRS code not found
         if merge:
             gdal.UseExceptions()
             osr.UseExceptions()
@@ -368,7 +376,7 @@ def main():
         os.mkdir(extract_folder)
         copy_extracted_files(ext_list, unzip_folder, extract_folder)
 
-        #: If we've gotten this far, we can go ahead and delete the temp directory (downloaded zips, initial
+        #: If we've gotten this far, we're safe to delete the temp directory (downloaded zips, initial
         #: extracted files) when we're finished.
         delete_temp = True
 
