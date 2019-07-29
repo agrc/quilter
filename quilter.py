@@ -1,3 +1,14 @@
+###############################################################################
+#
+# Project:  Quilter utility for raster.utah.gov
+# Purpose:  Download, merge, and/or reproject multiple datasets from the same 
+#           product into a single file
+# Author:   Jacob Adams, jdadams@utah.gov
+#
+###############################################################################
+# Copyright (c) 2019 AGRC
+# Dstributed under the MIT Licesnse. See LICENSE for more information.
+
 '''
 quilter.py
 
@@ -11,10 +22,7 @@ import tempfile
 import zipfile
 import shutil
 import sys
-import inspect
-import subprocess
 import argparse
-from pathlib import Path
 
 import requests
 from osgeo import gdal, osr
@@ -230,8 +238,6 @@ def vector_merge(shp_folder, output_location, crs):
                 shp_args.append(os.path.join(dir_name, fname))
 
     shp_args.append('-single')
-    # shp_args.append('-f')
-    # shp_args.append('ESRI Shapefile')
 
     if crs:
         shp_args.append('-t_srs')
@@ -275,7 +281,6 @@ def main():
 
     #: Set defaults
     merge = False
-    project = False
     delete_temp = False
 
     outfolder = args.destination
@@ -286,7 +291,7 @@ def main():
 
     if args.crs:
         projection = args.crs
-        # project = True
+
     else:
         projection = None
 
@@ -309,7 +314,7 @@ def main():
         #: Do these checks now so that they don't download files only to
         #: bomb out at the end
         #: Projection requires merging
-        if project and not merge:
+        if projection and not merge:
             raise ValueError('Must specify merged file name with -m.')
 
         #: Checks if gdal installed, proper projection code
@@ -318,7 +323,7 @@ def main():
             gdal.UseExceptions()
             osr.UseExceptions()
             gdal.SetConfigOption('COMPRESS_OVERVIEW', 'DEFLATE')
-            if project:
+            if projection:
                 proj_code = projection.split(':')
                 reference = osr.SpatialReference()
                 if proj_code[0].upper() == 'ESRI':
@@ -414,6 +419,7 @@ def main():
         #: Clean up temp directory
         if delete_temp:
             shutil.rmtree(temp_dir)
+
 
 if __name__ == '__main__':
     main()

@@ -1,4 +1,3 @@
-#!C:/Users/jdadams/AppData/Local/Continuum/miniconda3/envs/gdal\python.exe
 # -*- coding: utf-8 -*-
 ###############################################################################
 # $Id: ogrmerge.py 34b4a8f2f2f9c606b8f3db1b9211f48f99cd32fd 2019-03-19 17:06:24 +0100 Even Rouault $
