@@ -128,7 +128,7 @@ def extract_files(source_dir, unzip_dir):
     z_prog = 0
     for dir_name, subdir_list, file_list in os.walk(source_dir):
         for fname in file_list:
-            if str.endswith(fname, '.zip'):
+            if str.endswith(fname.lower(), '.zip'):
                 zip_list.append(os.path.join(dir_name, fname))
 
     for z in zip_list:
@@ -146,7 +146,7 @@ def copy_extracted_files(extensions, source_dir, target_dir):
     extract_prog = 0
     for dir_name, subdir_list, file_list in os.walk(source_dir):
         for fname in file_list:
-            if str.endswith(fname, extensions):
+            if str.endswith(fname.lower(), extensions):
                 extract_list.append(os.path.join(dir_name, fname))
 
     for extract_file in extract_list:
@@ -162,16 +162,32 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
     creating a vrt file at temp_vrt_path. If crs is specified, it reprojects the merged vrt via gdal.Warp();
     otherwise it translates the vrt to .tif via gdal.Translate(). crs must be in form EPSG:xxxx or ESRI:xxxx.
     '''
+
+    color_map = False
+
     #: Merge files by building VRT
     vrt_list = []
     for dir_name, subdir_list, file_list in os.walk(raster_folder):
         for fname in file_list:
-            if str.endswith(fname, extensions):
+            if str.endswith(fname.lower(), extensions):
                 vrt_list.append(os.path.join(dir_name, fname))
+
+    #: Check to see if any of the source files are color mapped (often seen on topos); these don't 
+    #: reproject nicely (gdal.WarpOptions has no rgbExpand)
+    #: TODO: Translate any color mapped files to rgb prior to building the vrt
+    for source in vrt_list:
+        test_ds = gdal.Open(source, gdal.GA_ReadOnly)
+        test_band = test_ds.GetRasterBand(1)
+        color_method = test_band.GetColorInterpretation()
+        if gdal.GetColorInterpretationName(color_method) == 'Palette':
+            color_map = True
+        
+        test_band = None
+        test_ds = None
 
     vrt_opts = gdal.BuildVRTOptions(resampleAlg='cubic')
     vrt = gdal.BuildVRT(temp_vrt_path, vrt_list, options=vrt_opts)
-    vrt = None  # releases file handle
+    vrt = None  #: releases file handle
 
     creation_opts = ['bigtiff=yes', 'compress=lzw', 'tiled=yes']
 
@@ -192,6 +208,11 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
 
     #: Project if desired
     if crs:
+
+        #: Can't combine & reproject color table files
+        if color_map:
+            raise RuntimeError('Color Map Present')
+
         print('\nProjecting {} to {}'.format(output_location, crs))
         warp_opts = gdal.WarpOptions(dstSRS=crs,
                                      resampleAlg='cubic',
@@ -210,8 +231,11 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
     #: Otherwise, just translate vrt to tif
     else:
         print('\nMerging into {}'.format(output_location))
+        if color_map:
+            print('\nNote: Translating color map to rgb')
         trans_opts = gdal.TranslateOptions(format='GTiff',
                                            creationOptions=creation_opts,
+                                           rgbExpand='rgb',
                                            callback=gdal_progress_callback)
         dataset = gdal.Translate(output_location, temp_vrt_path, options=trans_opts)
         dataset = None
@@ -234,7 +258,7 @@ def vector_merge(shp_folder, output_location, crs):
 
     for dir_name, subdir_list, file_list in os.walk(shp_folder):
         for fname in file_list:
-            if str.endswith(fname, '.shp'):
+            if str.endswith(fname.lower(), '.shp'):
                 shp_args.append(os.path.join(dir_name, fname))
 
     shp_args.append('-single')
@@ -400,7 +424,10 @@ def main():
     except RuntimeError as e:
         print("\n===========\nDON'T PANIC\n===========")
         if 'proj_create_from_database' in e.args[0]:
-            print('Projection code not recognized. Must be a valid EPSG or ESRI code in the format EPSG:xxxx or ESRI:xxxx.')
+            print('Projection code not recognized. Must be a valid EPSG or ESRI code and in the format EPSG:xxxx or ESRI:xxxx.')
+            delete_temp = True
+        elif 'no color table' in e.args[0]:
+            print('Cannot merge & reproject files with a colormap interpretation. Extracted files have been left in the destination directory but have not been merged or reprojected.')
             delete_temp = True
         else:
             print('Whoops, something went wrong. Any finished downloads have been left in {}'.format(temp_dir))
