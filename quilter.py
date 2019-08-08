@@ -1,19 +1,8 @@
-###############################################################################
-#
-# Project:  Quilter utility for raster.utah.gov
-# Purpose:  Download, merge, and reproject multiple datasets from the same
-#           product into a single file
-# Author:   Jacob Adams, jdadams@utah.gov
-#
-###############################################################################
-# Copyright (c) 2019 AGRC
-# Dstributed under the MIT Licesnse. See LICENSE for more information.
-
 '''
 quilter.py
 
-Download ALL THE RASTERS!!!
-
+Downloads, extracts, merges, and projects multiple datasets from the
+same product on raster.utah.gov into a single output file.
 '''
 
 import csv
@@ -28,6 +17,7 @@ import requests
 from osgeo import gdal, osr
 
 import ogrmerge
+
 
 #: Progress bar for download
 #: modified from https://sumit-ghosh.com/articles/python-download-progress-bar/
@@ -170,7 +160,6 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
             if str.endswith(fname.lower(), extensions):
                 vrt_list.append(os.path.join(dir_name, fname))
 
-
     creation_opts = ['bigtiff=yes', 'compress=lzw', 'tiled=yes']
 
     #: If the source is jpeg compressed, change output compression to jpeg
@@ -193,7 +182,7 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
     color_map_list = []
 
     #: Holds paths to be joined into VRT; any color mapped files will be translated to rgb and added to this list
-    rgb_list = []  
+    rgb_list = []
 
     #: Files are color mapped if they use 'Palette' color interpretation method
     for source in vrt_list:
@@ -304,19 +293,19 @@ def main():
     parser = argparse.ArgumentParser(description='Download helper for raster.utah.gov')
 
     parser.add_argument('csv', help='CSV file of download links.')
-    parser.add_argument('destination', help='Directory for extracted files (must already exist).')
+    parser.add_argument('destination',
+                        help='Directory for extracted files (will be created if it does not already exist).')
 
-    parser.add_argument(
-        '-m',
-        '--merge',
-        dest='name',
-        help=
-        'Merge downloaded files to specified base name. .tif or .shp extensions will be added as appropriate. Requires GDAL.'
-    )
-    parser.add_argument('-p',
-                        '--project',
-                        dest='crs',
+    parser.add_argument('-m', '--merge', dest='name',
+                        help='Merge downloaded files to specified base name. .tif or .shp extensions will be added as appropriate. Requires GDAL.')
+
+    parser.add_argument('-p', '--project', dest='crs',
                         help='Reproject merged file to specified CRS. Specify CRS like EPSG:x or ESRI:x. Requires -m.')
+
+    #: Prints full help if no arguments are given
+    if len(sys.argv) < 2:
+        parser.print_help()
+        sys.exit(1)
 
     args = parser.parse_args()
 
@@ -341,10 +330,18 @@ def main():
 
     try:
 
+        #: Input sanity checks
+        if not os.path.exists(csv_file):
+            raise IOError('CSV file {} does not exist.'.format(csv_file))
+
         #: set up temporary directory
         temp_dir = tempfile.mkdtemp()
 
         #: outfile sanity checks
+        if not os.path.exists(outfolder):
+            print('\nCreating output director {}...'.format(outfolder))
+            os.mkdir(outfolder)
+
         #: appends pid to path to give better chance for unique name
         extract_folder = os.path.join(outfolder, 'extracted' + str(os.getpid()))
         if os.path.exists(extract_folder):
@@ -426,10 +423,8 @@ def main():
         elif merge and not raster:
             vector_merge(extract_folder, vector_outpath, projection)
 
-
-
     except ImportError as e:
-        print("\n===========\nDON'T PANIC\n===========")
+        print("\n=============\n DON'T PANIC\n=============")
         if 'gdal' in e.args[0]:
             print(
                 "Can't import GDAL python bindings. Recommend installing latest GDAL from the conda-forge channel via conda: conda install -c conda-forge gdal."
@@ -439,25 +434,29 @@ def main():
         delete_temp = True
 
     except RuntimeError as e:
-        print("\n===========\nDON'T PANIC\n===========")
-        
+        print("\n=============\n DON'T PANIC\n=============")
+
         if 'proj_create_from_database' in e.args[0]:
-            print('Projection code not recognized. Must be a valid EPSG or ESRI code and in the format EPSG:xxxx or ESRI:xxxx.')
+            print(
+                'Projection code not recognized. Must be a valid EPSG or ESRI code and in the format EPSG:xxxx or ESRI:xxxx.'
+            )
             delete_temp = True
-        
+
         elif 'no color table' in e.args[0]:
-            print('Cannot merge & reproject files with a colormap interpretation. Extracted files have been left in the destination directory but have not been merged or reprojected.')
+            print(
+                'Cannot merge & reproject files with a colormap interpretation. Extracted files have been left in the destination directory but have not been merged or reprojected.'
+            )
             delete_temp = True
-        
+
         else:
             print('Whoops, something went wrong. Any finished downloads have been left in {}'.format(temp_dir))
             delete_temp = False
-        
+
         print('\nPython error message:')
         print(e)
 
     except Exception as e:
-        print("\n===========\nDON'T PANIC\n===========")
+        print("\n=============\n DON'T PANIC\n=============")
         print('Whoops, something went wrong. Any finished downloads have been left in {}'.format(temp_dir))
         print('\nPython error message:')
         print(e)
