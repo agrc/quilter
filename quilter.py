@@ -280,7 +280,7 @@ def vector_merge(shp_folder, output_location, crs):
     ogrmerge.process(shp_args, progress=gdal_progress_callback)
 
 
-def main():
+def main(args):
     '''
     Entry point for quilter.py.
     '''
@@ -303,11 +303,11 @@ def main():
                         help='Reproject merged file to specified CRS. Specify CRS like EPSG:x or ESRI:x. Requires -m.')
 
     #: Prints full help if no arguments are given
-    if len(sys.argv) < 2:
+    if len(args) < 1:
         parser.print_help()
         sys.exit(1)
 
-    args = parser.parse_args()
+    args = parser.parse_args(args)
 
     #: Set defaults
     merge = False
@@ -339,7 +339,7 @@ def main():
 
         #: outfile sanity checks
         if not os.path.exists(outfolder):
-            print('\nCreating output director {}...'.format(outfolder))
+            print('\nCreating output directory {}...'.format(outfolder))
             os.mkdir(outfolder)
 
         #: appends pid to path to give better chance for unique name
@@ -469,4 +469,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv[1:])
