@@ -251,6 +251,10 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
         dataset.BuildOverviews('NEAREST', [2, 4, 8, 16], gdal_progress_callback)
         dataset = None
 
+    #: Reset configuration options for any future runs using the same process
+    gdal.SetConfigOption('COMPRESS_OVERVIEW', None)
+    gdal.SetConfigOption('PHOTOMETRIC_OVERVIEW', None)
+
 
 def vector_merge(shp_folder, output_location, crs):
     '''
@@ -279,6 +283,10 @@ def vector_merge(shp_folder, output_location, crs):
     print('\nMerging Shapefiles...')
     ogrmerge.process(shp_args, progress=gdal_progress_callback)
 
+    #: Re-enable exceptions for any future runs using the same process
+    osr.UseExceptions()
+    gdal.UseExceptions()
+
 
 def main(args):
     '''
@@ -303,7 +311,7 @@ def main(args):
                         help='Reproject merged file to specified CRS. Specify CRS like EPSG:x or ESRI:x. Requires -m.')
 
     #: Prints full help if no arguments are given
-    if len(args) < 1:
+    if not args:
         parser.print_help()
         sys.exit(1)
 
@@ -325,7 +333,7 @@ def main(args):
     else:
         projection = None
 
-    ext_list = ('.img', '.tif', '.asc', '.jpg', '.jgw', '.xyz', '.tfw', '.dbf', '.prj', '.shp', '.shx')
+    ext_list = ('.img', '.tif', '.asc', '.jpg', '.jgw', '.met', '.xyz', '.tfw', '.dbf', '.prj', '.shp', '.shx')
     raster_exts = ('.img', '.tif', '.asc', '.jpg')
 
     try:
@@ -340,7 +348,7 @@ def main(args):
         #: outfile sanity checks
         if not os.path.exists(outfolder):
             print('\nCreating output directory {}...'.format(outfolder))
-            os.mkdir(outfolder)
+            os.makedirs(outfolder)
 
         #: appends pid to path to give better chance for unique name
         extract_folder = os.path.join(outfolder, 'extracted' + str(os.getpid()))
