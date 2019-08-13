@@ -1,0 +1,6 @@
+name: quilter
+channels:
+- conda-forge
+dependencies:
+- gdal
+- requests
