@@ -7,23 +7,26 @@ def test(method, csv_list):
     output_root = r'c:\gis\elevation\statewide\test'
     for csv_path in csv_list:
         
+        csv_name = os.path.basename(csv_path).split('.')[0]
+        
         if method == 'download':
-            csv_name = os.path.basename(csv_path).split('.')[0]
             test_dir = os.path.join(output_root, 'dl', csv_name)
             args = [csv_path, test_dir]
         
         elif method == 'merge':
-            csv_name = os.path.basename(csv_path).split('.')[0]
             test_dir = os.path.join(output_root, 'merge', csv_name)
             test_name = csv_name.split('.')[0]
             args = [csv_path, test_dir, '-m', test_name]
         
         elif method == 'reproject':
-            csv_name = os.path.basename(csv_path).split('.')[0]
             test_dir = os.path.join(output_root, 'reproject', csv_name)
             test_name = csv_name.split('.')[0]
             args = [csv_path, test_dir, '-m', test_name, '-p', 'EPSG:3566']
         
+        elif method == 'reproject_only':
+            test_dir = os.path.join(output_root, 'reproject_only', csv_name)
+            args = [csv_path, test_dir, '-p', 'EPSG:3566']
+
         else:
             raise NotImplementedError
 
@@ -39,7 +42,7 @@ def main():
                 test_csvs.append(os.path.join(dir_name, fname))
     
     #: Change the first argument as desired to test downloading only, dl + merge, and dl + reproject
-    test('reproject', test_csvs)
+    test('reproject_only', test_csvs)
 
 if __name__ == '__main__':
     main()

@@ -225,7 +225,7 @@ def set_gdal_options(file_list):
         sample_dataset = None
 
     return options
-    
+
 
 def raster_project(raster_folder, extensions, crs):
     '''
@@ -243,26 +243,59 @@ def raster_project(raster_folder, extensions, crs):
     #: Get creation options
     creation_opts = set_gdal_options(reproject_list)
 
-    #: Reproject one by one
-    for raster in reproject_list:
-        raster_name = os.path.split(raster)[1]
-        output_location = os.path.join(projected_dir, raster_name)
+    #: Convert any color mapped files to temporary RGB for processing
+    with tempfile.TemporaryDirectory() as temp_directory:
+        rgb_list = colormap_to_rgb(reproject_list, temp_directory)
 
-        print('\nProjecting {} to {}...'.format(raster, crs))
-        warp_opts = gdal.WarpOptions(dstSRS=crs,
-                                     resampleAlg='cubic',
-                                     format='GTiff',
-                                     multithread=True,
-                                     creationOptions=creation_opts,
-                                     callback=gdal_progress_callback)
-        dataset = gdal.Warp(output_location, raster, options=warp_opts)
-        dataset = None  #: Releases file handle
+        #: Reproject one by one
+        for raster in rgb_list:
+            raster_name = os.path.split(raster)[1]
+            output_location = os.path.join(projected_dir, raster_name)
 
-        print('\nBuilding overviews...')
-        dataset = gdal.Open(output_location, gdal.GA_ReadOnly)
-        dataset.BuildOverviews('NEAREST', [2, 4, 8, 16], gdal_progress_callback)
+            print('\nProjecting {} to {}...'.format(output_location, crs))
+            warp_opts = gdal.WarpOptions(dstSRS=crs,
+                                        resampleAlg='cubic',
+                                        format='GTiff',
+                                        multithread=True,
+                                        creationOptions=creation_opts,
+                                        callback=gdal_progress_callback)
+            dataset = gdal.Warp(output_location, raster, options=warp_opts)
+            dataset = None  #: Releases file handle
+
+            print('\nBuilding overviews...')
+            dataset = gdal.Open(output_location, gdal.GA_ReadOnly)
+            dataset.BuildOverviews('NEAREST', [2, 4, 8, 16], gdal_progress_callback)
+            dataset = None
+
+    #: Reset configuration options for any future runs using the same process
+    gdal.SetConfigOption('COMPRESS_OVERVIEW', 'DEFLATE')
+    gdal.SetConfigOption('PHOTOMETRIC_OVERVIEW', None)
+
+
+def vector_project(vector_folder, crs):
+    '''
+    Reprojects any shapefiles (defined by files ending in .shp) in shp_folder to a new directory in the same directory as shp_folder (eg, will create ../foo/projected for rasters in ../foo/shapefiles). crs must be in the form EPSG:xxxx or ESRI:xxxx.
+    '''
+    #: Create output directory
+    parent_dir = os.path.split(vector_folder)[0]
+    projected_dir = os.path.join(parent_dir, 'projected')
+    os.mkdir(projected_dir)
+
+    #: Get list of files to reproject
+    reproject_list = get_file_list(vector_folder, '.shp')
+
+    vector_opts = gdal.VectorTranslateOptions(dstSRS=crs, 
+                                              reproject=True, 
+                                              format='ESRI Shapefile', 
+                                              callback=gdal_progress_callback)
+    
+    for shapefile in reproject_list:
+        shp_name = os.path.split(shapefile)[1]
+        output_location = os.path.join(projected_dir, shp_name)
+
+        print('\nProjecting {} to {}...'.format(output_location, crs))
+        dataset = gdal.VectorTranslate(output_location, shapefile, options=vector_opts)
         dataset = None
-
 
 
 def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs):
@@ -491,8 +524,13 @@ def main(args):
         elif merge and not raster:
             vector_merge(extract_folder, vector_outpath, projection)
 
+        #: Raster reproject only
         elif projection and raster:
             raster_project(extract_folder, raster_exts, projection)
+
+        #: Vector reproject only
+        elif projection and not raster:
+            vector_project(extract_folder, projection)
 
     except ImportError as e:
         print("\n=============\n DON'T PANIC\n=============")
