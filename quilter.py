@@ -333,7 +333,7 @@ def main(args):
     else:
         projection = None
 
-    ext_list = ('.img', '.tif', '.asc', '.jpg', '.jgw', '.met', '.xyz', '.tfw', '.dbf', '.prj', '.shp', '.shx')
+    ext_list = ('.img', '.tif', '.asc', '.jpg', '.jgw', '.met', '.aux', '.xyz', '.tfw', '.dbf', '.prj', '.shp', '.shx')
     raster_exts = ('.img', '.tif', '.asc', '.jpg')
 
     try:
