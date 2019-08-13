@@ -114,12 +114,8 @@ def extract_files(source_dir, unzip_dir):
     Extracts any .zip files from source_dir into unzip_dir. The contents of each .zip are placed in
     unzip_dir; no subfolders are created.
     '''
-    zip_list = []
     z_prog = 0
-    for dir_name, subdir_list, file_list in os.walk(source_dir):
-        for fname in file_list:
-            if str.endswith(fname.lower(), '.zip'):
-                zip_list.append(os.path.join(dir_name, fname))
+    zip_list = get_file_list(source_dir, '.zip')
 
     for z in zip_list:
         z_prog += 1
@@ -132,18 +128,141 @@ def copy_extracted_files(extensions, source_dir, target_dir):
     '''
     Copies files with given extensions from source_dir to target_dir
     '''
-    extract_list = []
     extract_prog = 0
-    for dir_name, subdir_list, file_list in os.walk(source_dir):
-        for fname in file_list:
-            if str.endswith(fname.lower(), extensions):
-                extract_list.append(os.path.join(dir_name, fname))
+    extract_list = get_file_list(source_dir, extensions)
 
     for extract_file in extract_list:
         extract_prog += 1
         f_name = os.path.basename(extract_file)
         print('Copying {}, {} of {}'.format(f_name, extract_prog, str(len(extract_list))))
         shutil.copy2(extract_file, target_dir)
+
+
+def get_file_list(directory, extensions):
+    '''
+    Returns a list of full filepath for all files in directory with specified extensions
+    '''
+
+    file_list = []
+    for dir_name, subdir_list, files in os.walk(directory):
+        for fname in files:
+            if str.endswith(fname.lower(), extensions):
+                file_list.append(os.path.join(dir_name, fname))
+
+    return file_list
+
+
+def colormap_to_rgb(raster_paths, out_dir):
+    '''
+    Convert any color mapped files to rgb. Useful for preparing files for merging, reprojecting, etc.
+    '''
+
+    color_map_list = []
+
+    #: Holds paths to be joined into VRT; any color mapped files will be translated to rgb and added to this list
+    rgb_list = []
+
+    #: Files are color mapped if they use 'Palette' color interpretation method
+    for source in raster_paths:
+        test_ds = gdal.Open(source, gdal.GA_ReadOnly)
+        test_band = test_ds.GetRasterBand(1)
+        color_method = test_band.GetColorInterpretation()
+        
+        #: If it's color mapped, add to list to change to rgb; else add to final list
+        if gdal.GetColorInterpretationName(color_method) == 'Palette':
+            color_map_list.append(source)
+        else:
+            rgb_list.append(source)
+
+        test_band = None
+        test_ds = None
+
+    #: Translate any color mapped files to rgb prior to creating a VRT using rgbExpand='rgb' option.
+    #: Saves them in the temporary directory; does not alter files in source directory.
+
+    creation_opts = ['bigtiff=yes', 'compress=lzw', 'tiled=yes']
+
+    if color_map_list:
+        for color_map_file in color_map_list:
+
+            filename = os.path.split(color_map_file)[1]
+            rgb_file = os.path.join(out_dir, filename)
+
+            print('\nCreating temporary RGB version of {}...'.format(filename))
+            trans_opts = gdal.TranslateOptions(format='GTiff',
+                                               creationOptions=creation_opts,
+                                               rgbExpand='rgb',
+                                               callback=gdal_progress_callback)
+            dataset = gdal.Translate(rgb_file, color_map_file, options=trans_opts)
+            dataset = None
+            rgb_list.append(rgb_file)
+
+    return rgb_list
+
+
+def set_gdal_options(file_list):
+    '''
+    Returns a list of creation options and sets GDAL configuration options. Defaults to lzw compression, but will set jpeg-appropriate options based on the first file of the list (assumes homogenous file structure within the list). 
+    '''
+
+    #: Defaults
+    options = ['bigtiff=yes', 'compress=lzw', 'tiled=yes']
+
+    #: Check for jpeg compression
+    if file_list:
+        sample_dataset = gdal.Open(file_list[0], gdal.GA_ReadOnly)
+        sample_metadata = sample_dataset.GetMetadata('IMAGE_STRUCTURE')
+
+        if 'COMPRESSION' in sample_metadata and 'JPEG' in sample_metadata['COMPRESSION']:
+            options = ['bigtiff=yes', 'compress=jpeg', 'tiled=yes']
+            gdal.SetConfigOption('COMPRESS_OVERVIEW', 'JPEG')
+
+            #: Sometimes JPEG-compressed files don't use ycbcr 
+            if 'YCbCr' in sample_metadata['COMPRESSION']:
+                options.append('photometric=ycbcr')
+                gdal.SetConfigOption('PHOTOMETRIC_OVERVIEW', 'YCBCR')
+
+        sample_dataset = None
+
+    return options
+    
+
+def raster_project(raster_folder, extensions, crs):
+    '''
+    Reprojects any rasters (defined by comparing file names to extensions) in raster_folder to a new directory in the same directory as raster_folder (eg, will create ../foo/projected for rasters in ../foo/rasters). crs must be in the form EPSG:xxxx or ESRI:xxxx.
+    '''
+
+    #: Create output directory
+    parent_dir = os.path.split(raster_folder)[0]
+    projected_dir = os.path.join(parent_dir, 'projected')
+    os.mkdir(projected_dir)
+
+    #: Get list of files to reproject
+    reproject_list = get_file_list(raster_folder, extensions)
+
+    #: Get creation options
+    creation_opts = set_gdal_options(reproject_list)
+
+    #: Reproject one by one
+    for raster in reproject_list:
+        raster_name = os.path.split(raster)[1]
+        output_location = os.path.join(projected_dir, raster_name)
+
+        print('\nProjecting {} to {}...'.format(raster, crs))
+        warp_opts = gdal.WarpOptions(dstSRS=crs,
+                                     resampleAlg='cubic',
+                                     format='GTiff',
+                                     multithread=True,
+                                     creationOptions=creation_opts,
+                                     callback=gdal_progress_callback)
+        dataset = gdal.Warp(output_location, raster, options=warp_opts)
+        dataset = None  #: Releases file handle
+
+        print('\nBuilding overviews...')
+        dataset = gdal.Open(output_location, gdal.GA_ReadOnly)
+        dataset.BuildOverviews('NEAREST', [2, 4, 8, 16], gdal_progress_callback)
+        dataset = None
+
 
 
 def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs):
@@ -154,66 +273,14 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
     '''
 
     #: Create list of files to be (eventually) merged/projected via VRT
-    vrt_list = []
-    for dir_name, subdir_list, file_list in os.walk(raster_folder):
-        for fname in file_list:
-            if str.endswith(fname.lower(), extensions):
-                vrt_list.append(os.path.join(dir_name, fname))
+    vrt_list = get_file_list(raster_folder, extensions)
 
-    creation_opts = ['bigtiff=yes', 'compress=lzw', 'tiled=yes']
+    #: Get creation options
+    creation_opts = set_gdal_options(vrt_list)
 
-    #: If the source is jpeg compressed, change output compression to jpeg
-    if vrt_list:
-        sample_dataset = gdal.Open(vrt_list[0], gdal.GA_ReadOnly)
-        sample_metadata = sample_dataset.GetMetadata('IMAGE_STRUCTURE')
-
-        if 'COMPRESSION' in sample_metadata and 'JPEG' in sample_metadata['COMPRESSION']:
-            creation_opts = ['bigtiff=yes', 'compress=jpeg', 'tiled=yes']
-            gdal.SetConfigOption('COMPRESS_OVERVIEW', 'JPEG')
-
-            if 'YCbCr' in sample_metadata['COMPRESSION']:
-                creation_opts.append('photometric=ycbcr')
-                gdal.SetConfigOption('PHOTOMETRIC_OVERVIEW', 'YCBCR')
-
-        sample_dataset = None
-
-    #: Check to see if any of the source files are color mapped (often seen on topos); these don't
-    #: merge or reproject nicely
-    color_map_list = []
-
-    #: Holds paths to be joined into VRT; any color mapped files will be translated to rgb and added to this list
-    rgb_list = []
-
-    #: Files are color mapped if they use 'Palette' color interpretation method
-    for source in vrt_list:
-        test_ds = gdal.Open(source, gdal.GA_ReadOnly)
-        test_band = test_ds.GetRasterBand(1)
-        color_method = test_band.GetColorInterpretation()
-        if gdal.GetColorInterpretationName(color_method) == 'Palette':
-            color_map_list.append(source)
-        else:
-            rgb_list.append(source)
-
-        test_band = None
-        test_ds = None
-
-    #: Translate any colormapped files to rgb prior to creating a VRT using rgbExpand='rgb' option.
-    #: Saves them in the same temp directory as VRT; does not alter files in extracted directory.
-    if color_map_list:
-        for color_map_file in color_map_list:
-
-            directory = os.path.split(temp_vrt_path)[0]
-            filename = os.path.split(color_map_file)[1]
-            rgb_file = os.path.join(directory, filename)
-
-            print('\nCreating temporary RGB version of {}...'.format(filename))
-            trans_opts = gdal.TranslateOptions(format='GTiff',
-                                               creationOptions=creation_opts,
-                                               rgbExpand='rgb',
-                                               callback=gdal_progress_callback)
-            dataset = gdal.Translate(rgb_file, color_map_file, options=trans_opts)
-            dataset = None
-            rgb_list.append(rgb_file)
+    #: Convert any color mapped files to temporary RGB for processing
+    temp_directory = os.path.split(temp_vrt_path)[0]
+    rgb_list = colormap_to_rgb(vrt_list, temp_directory)
 
     #: Build our VRT from the list of rgb-colored files
     vrt_opts = gdal.BuildVRTOptions(resampleAlg='cubic')
@@ -252,7 +319,7 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
         dataset = None
 
     #: Reset configuration options for any future runs using the same process
-    gdal.SetConfigOption('COMPRESS_OVERVIEW', None)
+    gdal.SetConfigOption('COMPRESS_OVERVIEW', 'DEFLATE')
     gdal.SetConfigOption('PHOTOMETRIC_OVERVIEW', None)
 
 
@@ -266,10 +333,7 @@ def vector_merge(shp_folder, output_location, crs):
     #: Args are same as if calling from command line
     shp_args = ['-o', output_location]
 
-    for dir_name, subdir_list, file_list in os.walk(shp_folder):
-        for fname in file_list:
-            if str.endswith(fname.lower(), '.shp'):
-                shp_args.append(os.path.join(dir_name, fname))
+    shp_args.extend(get_file_list(shp_folder, '.shp'))
 
     shp_args.append('-single')
 
@@ -308,7 +372,7 @@ def main(args):
                         help='Merge downloaded files to specified base name. .tif or .shp extensions will be added as appropriate. Requires GDAL.')
 
     parser.add_argument('-p', '--project', dest='crs',
-                        help='Reproject merged file to specified CRS. Specify CRS like EPSG:x or ESRI:x. Requires -m.')
+                        help='Reproject individual or merged files to specified CRS. Specify CRS like EPSG:x or ESRI:x.')
 
     #: Prints full help if no arguments are given
     if not args:
@@ -359,24 +423,20 @@ def main(args):
 
         #: Do these checks now so that they don't download files only to
         #: bomb out at the end
-        #: Projection requires merging
-        if projection and not merge:
-            raise ValueError('Must specify merged file name with -m.')
 
         #: Checks if gdal installed, proper projection code
         #: Will raise an error if gdal is not installed or CRS code not found
-        if merge:
-            gdal.UseExceptions()
-            osr.UseExceptions()
-            gdal.SetConfigOption('COMPRESS_OVERVIEW', 'DEFLATE')
-            if projection:
-                proj_code = projection.split(':')
-                reference = osr.SpatialReference()
-                if proj_code[0].upper() == 'ESRI':
-                    reference.ImportFromESRI(int(proj_code[1]))
-                elif proj_code[0].upper() == 'EPSG':
-                    reference.ImportFromEPSG(int(proj_code[1]))
-                reference = None
+        gdal.UseExceptions()
+        osr.UseExceptions()
+        gdal.SetConfigOption('COMPRESS_OVERVIEW', 'DEFLATE')
+        if projection:
+            proj_code = projection.split(':')
+            reference = osr.SpatialReference()
+            if proj_code[0].upper() == 'ESRI':
+                reference.ImportFromESRI(int(proj_code[1]))
+            elif proj_code[0].upper() == 'EPSG':
+                reference.ImportFromEPSG(int(proj_code[1]))
+            reference = None
 
         #: TODO: updated csv format from raster.utah.gov app
         #: TODO: Framework for handling different csv formats (which columns the format and link are in)
@@ -430,6 +490,9 @@ def main(args):
         #: Shapefile merging
         elif merge and not raster:
             vector_merge(extract_folder, vector_outpath, projection)
+
+        elif projection and raster:
+            raster_project(extract_folder, raster_exts, projection)
 
     except ImportError as e:
         print("\n=============\n DON'T PANIC\n=============")
