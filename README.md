@@ -2,7 +2,7 @@
 
 Have you ever tried to download a bunch of data from raster.utah.gov, clicking one link at a time, and thought "There's got to be an easier way to do this?"
 
-Enter quilter, a python script built on the GDAL python library that will automatically download, extract, merge, and reproject all the datasets in your search.
+Enter quilter, a python script built on the GDAL python library that will automatically download, extract, merge, and reproject all the datasets in your search using a CSV created by raster.utah.gov (the CSV generator is under development).
 
 quilter works on all the different products available on raster.utah.gov:
 * DEMs
@@ -11,11 +11,11 @@ quilter works on all the different products available on raster.utah.gov:
 * Topos, both standard and trimmed
 * Historical topos
 
-quilter may also work on the CSVs created by USGS' [National Map Download](https://viewer.nationalmap.gov/basic/), but has not been tested against all their products.
+quilter may also work with the CSVs created by USGS' [National Map Download](https://viewer.nationalmap.gov/basic/), but has not been tested against all their products.
 
 ## Installation
 
-quilter depends on the GDAL python bindings and the `requests` library. The recommended and supported way to to install these is to use the conda environment manager (especially on Windows). Installing GDAL via pip on Windows requires MS Visual C++ to compile, while conda's packages are pre-compiled.
+quilter depends on the GDAL python bindings and the `requests` library. The supported way to to install these is to use the conda environment manager.
 
 To install quilter:
 
@@ -27,34 +27,36 @@ To install quilter:
 
 >**Why conda-forge?**
 >
->The GDAL package in the default conda channel does not have BigTIFF support for TIFFs larger than 4GB. quilter sets the BigTIFF flag for any TIFFs that it creates (equivalent to the `-co bigtiff=yes` CLI flag).
+>The default conda channel's GDAL does not have support for TIFFs larger than 4GB. quilter sets the BigTIFF flag for any TIFFs that it creates (equivalent to the `-co bigtiff=yes` CLI flag).
 >
->quilter will still run properly for TIFFs <4GB if you install GDAL from the default channel, but it will give warnings about BigTIFF support.
+>quilter will still run if you install GDAL from the default channel, but it will give warnings about BigTIFF support and will fail when writing any TIFFs >4GB.
 >
 >The GDAL package included in ESRI's ArcGIS Pro environment is compiled with BigTIFF support.
 
 # Usage
 
-`python quilter.py path_to_csv output_folder -m merged_name -p epsg_code`
+`python quilter.py csv output_folder` _`-m name`_ _`-p epsg_code`_
 
-By default, quilter will download the files listed in a csv file generated from raster.utah.gov to a specified directory.
+By default, quilter will download the files listed in `csv` (generated from raster.utah.gov) to the specified `output_folder`.
 
-The `-m` flag will merge the downloaded files into a single dataset with the given name (omit the file extension). quilter assumes all the files are spatially contiguous; merging files with large gaps between them will create huge output file sizes.
+* The optional `-m` flag will merge the downloaded files into a single dataset with the given `name` (omit the file extension). 
 
->**Note:** While quilter can merge the standard and historical topos, we don't recommend it because the collar around the maps overlap. The "collarless" topos should merge just fine if you want to create your own custom mosaic.
+  >**Note:** We don't recommend merging the normal or historical topos because the collar around the maps overlap. The "collarless" topos merge fine.
 
-The `-p` flag will reproject each downloaded file into the specified CRS.
+* The optional `-p` flag will reproject each downloaded file into the CRS specified by an `epsg_code`. This should be in the format `EPSG:xxxx` or `ESRI:xxxx`. 
 
-The `-p` and `-m` flags can be used together to create a single file reprojected to the desired CRS.
+  >**Note:** Some .asc files lacking detailed projection info will project to weird locations.
+
+* The `-p` and `-m` flags can be used together to create a single file reprojected to the desired CRS.
 
 ## Usage Examples
 
-* `python quilter.py dems.csv c:\data\dems -m tville -p EPSG:3566`
+`python quilter.py dems.csv c:\data\dems -m tville -p EPSG:3566`
   * Download all the DEMs listed in `dems.csv` to `c:\data\dems`
   * Merge the DEMs into the single file `c:\data\tville.tif`
   * Reproject `tville.tif` to the Utah State Plane Central CRS.
 
-* `python quilter.py dems.csv c:\data\dems -p EPSG:3566`
+`python quilter.py dems.csv c:\data\dems -p EPSG:3566`
   * Download all the DEMs listed in `dems.csv` to `c:\data\dems`
   * Create copies of each DEM reprojected to Utah State Plane Central in `c:\data\reprojected`.
 
