@@ -1,10 +1,10 @@
 import os
+import sys
 
 import quilter
 
 
-def test(method, csv_list):
-    output_root = r'c:\gis\elevation\statewide\test'
+def test(method, csv_list, output_root):
     for csv_path in csv_list:
         
         csv_name = os.path.basename(csv_path).split('.')[0]
@@ -33,8 +33,12 @@ def test(method, csv_list):
         quilter.main(args)
 
 
-def main():
-    csv_dir = r'c:\gis\git\quilter\csvs'
+def main(args):
+
+    output_dir = args[1]
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    csv_dir = os.path.join(script_dir, 'csvs')
+    print(csv_dir)
     test_csvs = []
     for dir_name, subdir_list, file_list in os.walk(csv_dir):
         for fname in file_list:
@@ -42,7 +46,9 @@ def main():
                 test_csvs.append(os.path.join(dir_name, fname))
     
     #: Change the first argument as desired to test downloading only, dl + merge, and dl + reproject
-    test('reproject_only', test_csvs)
+    #: Second arg is list of csvs
+    #: Third arg is output directory (suggest calling like: 'python tests.py .' to put in current directory)
+    test('reproject_only', test_csvs, output_dir)
 
 if __name__ == '__main__':
-    main()
+    main(sys.argv)
