@@ -1,5 +1,5 @@
 {
-    "python.pythonPath": "C:\\Users\\jdadams\\AppData\\Local\\Continuum\\miniconda3\\envs\\gdal\\python.exe",
+    "python.pythonPath": "~\\AppData\\Local\\Continuum\\miniconda3\\envs\\gdal\\python.exe",
 	"python.linting.pylintEnabled": true,
 	"python.linting.enabled": true,
 	"python.formatting.provider": "yapf"

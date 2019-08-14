@@ -1,4 +1,4 @@
-# quilter
+# 🧵 quilter 
 
 Have you ever tried to download a bunch of data from raster.utah.gov, clicking one link at a time, and thought "There's got to be an easier way to do this?"
 
@@ -13,25 +13,25 @@ quilter works on all the different products available on raster.utah.gov:
 
 quilter may also work on the CSVs created by USGS' [National Map Download](https://viewer.nationalmap.gov/basic/), but has not been tested against all their products.
 
-## Dependencies
-
-* GDAL python bindings
-* `requests` library
-
 ## Installation
 
-quilter depends on the GDAL python bindings. The recommended and supported way to to install these bindings is to use the conda environment manager (especially on Windows). There are two options for getting the needed dependencies:
+quilter depends on the GDAL python bindings and the `requests` library. The recommended and supported way to to install these is to use the conda environment manager (especially on Windows). Installing GDAL via pip on Windows requires MS Visual C++ to compile, while conda's packages are pre-compiled.
 
-1. Clone an ArcGIS Pro default conda environment — GDAL and `requests` are already installed.
-1. Create a new conda environment using environment.yml: `conda env create -f environment.yml`. This installs GDAL via the conda-forge channel.
+To install quilter:
 
-#### Why conda-forge?
+1. Create a conda environment with the needed packages installed:
+   * Clone the ArcGIS Pro default conda environment — GDAL and `requests` are already installed.
+   _— or —_
+   * Create a new conda environment using environment.yml: `conda env create -f environment.yml`. This installs GDAL via the conda-forge channel.
+1. Clone the quilter repository.
 
-The GDAL package in the default conda channel does not have BigTIFF support for TIFFs larger than 4GB. quilter sets the BigTIFF flag for any TIFFs that it creates (equivalent to the `-co bigtiff=yes` CLI flag).
-
-quilter will still run properly for TIFFs <4GB if you install GDAL from the default channel, but it will give warnings about BigTIFF support.
-
-The GDAL package included in ESRI's ArcGIS Pro environment is compiled with BigTIFF support.
+>**Why conda-forge?**
+>
+>The GDAL package in the default conda channel does not have BigTIFF support for TIFFs larger than 4GB. quilter sets the BigTIFF flag for any TIFFs that it creates (equivalent to the `-co bigtiff=yes` CLI flag).
+>
+>quilter will still run properly for TIFFs <4GB if you install GDAL from the default channel, but it will give warnings about BigTIFF support.
+>
+>The GDAL package included in ESRI's ArcGIS Pro environment is compiled with BigTIFF support.
 
 # Usage
 
@@ -41,13 +41,13 @@ By default, quilter will download the files listed in a csv file generated from 
 
 The `-m` flag will merge the downloaded files into a single dataset with the given name (omit the file extension). quilter assumes all the files are spatially contiguous; merging files with large gaps between them will create huge output file sizes.
 
->Note: While quilter can merge the standard and historical topos, we don't recommend it because the collar around the maps overlap. The "collarless" topos should merge just fine if you want to create your own custom mosaic.
+>**Note:** While quilter can merge the standard and historical topos, we don't recommend it because the collar around the maps overlap. The "collarless" topos should merge just fine if you want to create your own custom mosaic.
 
-The `-p` flag will reproject each downloaded file into the specified CRS. 
+The `-p` flag will reproject each downloaded file into the specified CRS.
 
 The `-p` and `-m` flags can be used together to create a single file reprojected to the desired CRS.
 
-## Examples
+## Usage Examples
 
 * `python quilter.py dems.csv c:\data\dems -m tville -p EPSG:3566`
   * Download all the DEMs listed in `dems.csv` to `c:\data\dems`
@@ -55,5 +55,11 @@ The `-p` and `-m` flags can be used together to create a single file reprojected
   * Reproject `tville.tif` to the Utah State Plane Central CRS.
 
 * `python quilter.py dems.csv c:\data\dems -p EPSG:3566`
-  * Download all the DEMS listed in `dems.csv` to `c:\data\dems`
+  * Download all the DEMs listed in `dems.csv` to `c:\data\dems`
   * Create copies of each DEM reprojected to Utah State Plane Central in `c:\data\reprojected`.
+
+## Development
+
+quilter is developed in VS Code using `pylint` for linting and `yapf` for some formatting. 
+
+The .vscode directory has been included in the repo for those interested in development. Because quilter uses conda, settings.json points to a specific conda environment. This may trigger VS Code to prompt you for the proper environment the first time you open the file.
