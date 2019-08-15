@@ -227,15 +227,13 @@ def set_gdal_options(file_list):
     return options
 
 
-def raster_project(raster_folder, extensions, crs):
+def raster_project(raster_folder, out_dir, extensions, crs):
     '''
     Reprojects any rasters (defined by comparing file names to extensions) in raster_folder to a new directory in the same directory as raster_folder (eg, will create ../foo/projected for rasters in ../foo/rasters). crs must be in the form EPSG:xxxx or ESRI:xxxx.
     '''
 
     #: Create output directory
-    parent_dir = os.path.split(raster_folder)[0]
-    projected_dir = os.path.join(parent_dir, 'projected')
-    os.mkdir(projected_dir)
+    os.mkdir(out_dir)
 
     #: Get list of files to reproject
     reproject_list = get_file_list(raster_folder, extensions)
@@ -250,7 +248,7 @@ def raster_project(raster_folder, extensions, crs):
         #: Reproject one by one
         for raster in rgb_list:
             raster_name = os.path.split(raster)[1]
-            output_location = os.path.join(projected_dir, raster_name)
+            output_location = os.path.join(out_dir, raster_name)
 
             print('\nProjecting {} to {}...'.format(output_location, crs))
             warp_opts = gdal.WarpOptions(dstSRS=crs,
@@ -272,14 +270,12 @@ def raster_project(raster_folder, extensions, crs):
     gdal.SetConfigOption('PHOTOMETRIC_OVERVIEW', None)
 
 
-def vector_project(vector_folder, crs):
+def vector_project(vector_folder, out_dir, crs):
     '''
     Reprojects any shapefiles (defined by files ending in .shp) in shp_folder to a new directory in the same directory as shp_folder (eg, will create ../foo/projected for rasters in ../foo/shapefiles). crs must be in the form EPSG:xxxx or ESRI:xxxx.
     '''
     #: Create output directory
-    parent_dir = os.path.split(vector_folder)[0]
-    projected_dir = os.path.join(parent_dir, 'projected')
-    os.mkdir(projected_dir)
+    os.mkdir(out_dir)
 
     #: Get list of files to reproject
     reproject_list = get_file_list(vector_folder, '.shp')
@@ -291,7 +287,7 @@ def vector_project(vector_folder, crs):
     
     for shapefile in reproject_list:
         shp_name = os.path.split(shapefile)[1]
-        output_location = os.path.join(projected_dir, shp_name)
+        output_location = os.path.join(out_dir, shp_name)
 
         print('\nProjecting {} to {}...'.format(output_location, crs))
         dataset = gdal.VectorTranslate(output_location, shapefile, options=vector_opts)
@@ -416,7 +412,6 @@ def main(args):
 
     #: Set defaults
     merge = False
-    delete_temp = False
 
     outfolder = args.destination
     csv_file = args.csv
@@ -459,6 +454,13 @@ def main(args):
         if os.path.exists(extract_folder):
             raise IOError('Extrated files directory {} already exists.'.format(extract_folder))
 
+        #: Project-only directory check
+        if projection and not merge:
+            proj_dir = os.path.join(outfolder, 'q_projected')
+            if os.path.exists(extract_folder):
+                raise IOError('Projected files directory {} already exists.'.format(proj_dir))
+
+
         #: Do these checks now so that they don't download files only to bomb out at the end
 
         #: Checks if gdal installed, proper projection code
@@ -488,12 +490,13 @@ def main(args):
         else:
             raster = True
 
-        #: Explicit file exists checks
+        #: Projected/merged file exists checks
         if merge and raster:
             raster_outpath = os.path.join(outfolder, final_name + '.tif')
             vrt_path = os.path.join(temp_dir, final_name + str(os.getpid()) + '.vrt')
             if os.path.exists(raster_outpath):
                 raise IOError('Output file {} already exists.'.format(raster_outpath))
+        
         if merge and not raster:
             vector_outpath = os.path.join(outfolder, final_name + '.shp')
             if os.path.exists(vector_outpath):
@@ -515,10 +518,6 @@ def main(args):
         os.mkdir(extract_folder)
         copy_extracted_files(ext_list, unzip_folder, extract_folder)
 
-        #: If we've gotten this far, we're safe to delete the temp directory (downloaded zips, initial
-        #: extracted files) when we're finished.
-        delete_temp = True
-
         #: Raster merging
         if merge and raster:
             raster_merge(extract_folder, raster_outpath, vrt_path, raster_exts, projection)
@@ -529,11 +528,11 @@ def main(args):
 
         #: Raster reproject only
         elif projection and raster:
-            raster_project(extract_folder, raster_exts, projection)
+            raster_project(extract_folder, proj_dir, raster_exts, projection)
 
         #: Vector reproject only
         elif projection and not raster:
-            vector_project(extract_folder, projection)
+            vector_project(extract_folder, proj_dir, projection)
 
     except ImportError as e:
         print("\n=============\n DON'T PANIC\n=============")
