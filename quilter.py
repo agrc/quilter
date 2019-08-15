@@ -449,15 +449,17 @@ def main(args):
         else:
             print('\nUsing existing output directory {}...'.format(outfolder))
 
-        #: appends pid to path to give better chance for unique name
-        extract_folder = os.path.join(outfolder, 'extracted' + str(os.getpid()))
-        if os.path.exists(extract_folder):
-            raise IOError(
-                'Extrated files directory {} already exists. Usually just trying to run the script again should fix this problem.'
-                .format(extract_folder))
+        #: Download folder
+        dl_folder = os.path.join(outfolder, 'q_dl')
+        if os.path.exists(dl_folder):
+            raise IOError('Downloaded files directory {} already exists.'.format(dl_folder))
 
-        #: Do these checks now so that they don't download files only to
-        #: bomb out at the end
+        #: Extracted file folder
+        extract_folder = os.path.join(outfolder, 'q_extracted' + str(os.getpid()))
+        if os.path.exists(extract_folder):
+            raise IOError('Extrated files directory {} already exists.'.format(extract_folder))
+
+        #: Do these checks now so that they don't download files only to bomb out at the end
 
         #: Checks if gdal installed, proper projection code
         #: Will raise an error if gdal is not installed or CRS code not found
@@ -499,7 +501,6 @@ def main(args):
 
         #: Download links to temp dir
         print('\nDownloading files...')
-        dl_folder = os.path.join(outfolder, 'dl')
         os.mkdir(dl_folder)
         download_links(dl_links, dl_folder)
 
@@ -542,7 +543,6 @@ def main(args):
             )
         print('\nPython error message:')
         print(e)
-        delete_temp = True
 
     except RuntimeError as e:
         print("\n=============\n DON'T PANIC\n=============")
@@ -551,32 +551,27 @@ def main(args):
             print(
                 'Projection code not recognized. Must be a valid EPSG or ESRI code and in the format EPSG:xxxx or ESRI:xxxx.'
             )
-            delete_temp = True
 
         elif 'no color table' in e.args[0]:
             print(
                 'Cannot merge & reproject files with a colormap interpretation. Extracted files have been left in the destination directory but have not been merged or reprojected.'
             )
-            delete_temp = True
 
         else:
-            print('Whoops, something went wrong. Any finished downloads have been left in {}'.format(temp_dir))
-            delete_temp = False
+            print('Whoops, something went wrong. Any finished downloads are in {}'.format(outfolder))
 
         print('\nPython error message:')
         print(e)
 
     except Exception as e:
         print("\n=============\n DON'T PANIC\n=============")
-        print('Whoops, something went wrong. Any finished downloads have been left in {}'.format(temp_dir))
+        print('Whoops, something went wrong. Any finished downloads are in {}'.format(outfolder))
         print('\nPython error message:')
         print(e)
-        delete_temp = False
 
     finally:
         #: Clean up temp directory
-        if delete_temp:
-            shutil.rmtree(temp_dir)
+        shutil.rmtree(temp_dir)
 
 
 if __name__ == '__main__':
