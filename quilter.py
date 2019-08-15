@@ -446,6 +446,8 @@ def main(args):
         if not os.path.exists(outfolder):
             print('\nCreating output directory {}...'.format(outfolder))
             os.makedirs(outfolder)
+        else:
+            print('\nUsing existing output directory {}...'.format(outfolder))
 
         #: appends pid to path to give better chance for unique name
         extract_folder = os.path.join(outfolder, 'extracted' + str(os.getpid()))
@@ -474,7 +476,7 @@ def main(args):
         #: TODO: updated csv format from raster.utah.gov app
         #: TODO: Framework for handling different csv formats (which columns the format and link are in)
 
-        #: Create list of links
+        #: Create list of links (need to know if raster or vector for file exist checks)
         print('\nReading CSV...')
         dl_links = read_csv(csv_file)
 
@@ -497,7 +499,7 @@ def main(args):
 
         #: Download links to temp dir
         print('\nDownloading files...')
-        dl_folder = os.path.join(temp_dir, 'dl')
+        dl_folder = os.path.join(outfolder, 'dl')
         os.mkdir(dl_folder)
         download_links(dl_links, dl_folder)
 
