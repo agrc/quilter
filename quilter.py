@@ -445,12 +445,12 @@ def main(args):
             print('\nUsing existing output directory {}...'.format(outfolder))
 
         #: Download folder
-        dl_folder = os.path.join(outfolder, 'q_dl')
+        dl_folder = os.path.join(outfolder, 'q_zips')
         if os.path.exists(dl_folder):
             raise IOError('Downloaded files directory {} already exists.'.format(dl_folder))
 
         #: Extracted file folder
-        extract_folder = os.path.join(outfolder, 'q_extracted' + str(os.getpid()))
+        extract_folder = os.path.join(outfolder, 'q_extracted')
         if os.path.exists(extract_folder):
             raise IOError('Extrated files directory {} already exists.'.format(extract_folder))
 

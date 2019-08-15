@@ -53,13 +53,15 @@ By default, quilter will download the files listed in `csv` (generated from rast
 ## Usage Examples
 
 `python quilter.py dems.csv c:\data\dems -m tville -p EPSG:3566`
-  * Download all the DEMs listed in `dems.csv` to `c:\data\dems`
-  * Merge the DEMs into the single file `c:\data\tville.tif`
+  * Download all the DEM .zips listed in `dems.csv` to `c:\data\dems\q_zips`
+  * Extract the DEMs to `c:\data\dems\q_extracted`
+  * Merge the DEMs into the single file `c:\data\dems\tville.tif`
   * Reproject `tville.tif` to the Utah State Plane Central CRS.
 
 `python quilter.py dems.csv c:\data\dems -p EPSG:3566`
-  * Download all the DEMs listed in `dems.csv` to `c:\data\dems`
-  * Create copies of each DEM reprojected to Utah State Plane Central in `c:\data\reprojected`.
+  * Download all the DEM .zips listed in `dems.csv` to `c:\data\dems\q_zips`
+  * Extract the DEMs to `c:\data\dems\q_extracted`
+  * Create copies of each DEM reprojected to Utah State Plane Central in `c:\data\q_projected`.
 
 ## Development
 
