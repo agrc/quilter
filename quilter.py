@@ -234,9 +234,6 @@ def raster_project(raster_folder, out_dir, extensions, crs):
     Reprojects any rasters (defined by comparing file names to extensions) in raster_folder to a new directory in the same directory as raster_folder (eg, will create ../foo/projected for rasters in ../foo/rasters). crs must be in the form EPSG:xxxx or ESRI:xxxx.
     '''
 
-    #: Create output directory
-    os.mkdir(out_dir)
-
     #: Get list of files to reproject
     reproject_list = get_file_list(raster_folder, extensions)
 
@@ -276,8 +273,6 @@ def vector_project(vector_folder, out_dir, crs):
     '''
     Reprojects any shapefiles (defined by files ending in .shp) in shp_folder to a new directory in the same directory as shp_folder (eg, will create ../foo/projected for rasters in ../foo/shapefiles). crs must be in the form EPSG:xxxx or ESRI:xxxx.
     '''
-    #: Create output directory
-    os.mkdir(out_dir)
 
     #: Get list of files to reproject
     reproject_list = get_file_list(vector_folder, '.shp')
@@ -453,17 +448,20 @@ def main(args):
         dl_folder = os.path.join(outfolder, 'q_zips')
         if os.path.exists(dl_folder):
             raise IOError('Downloaded files directory {} already exists.'.format(dl_folder))
+        os.mkdir(dl_folder)
 
         #: Extracted file folder
         extract_folder = os.path.join(outfolder, 'q_extracted')
         if os.path.exists(extract_folder):
             raise IOError('Extrated files directory {} already exists.'.format(extract_folder))
+        os.mkdir(extract_folder)
 
         #: Project-only directory check
         if projection and not merge:
             proj_dir = os.path.join(outfolder, 'q_projected')
-            if os.path.exists(extract_folder):
+            if os.path.exists(proj_dir):
                 raise IOError('Projected files directory {} already exists.'.format(proj_dir))
+            os.mkdir(proj_dir)
 
         #: Checks if gdal installed, proper projection code
         #: Will raise an error if gdal is not installed or CRS code not found
@@ -505,20 +503,16 @@ def main(args):
 
         #: Download links to temp dir
         print('\nDownloading files...')
-        os.mkdir(dl_folder)
         download_links(dl_links, dl_folder)
 
         with tempfile.TemporaryDirectory() as temp_dir:
             #: Unzip to temp dir
             print('\nUnzipping files...')
-            unzip_folder = os.path.join(temp_dir, 'uz')
-            os.mkdir(unzip_folder)
-            extract_files(dl_folder, unzip_folder)
+            extract_files(dl_folder, temp_dir)
 
             #: Copy out all relevant files to output dir
             print('\nCopying extracted files to {}...'.format(extract_folder))
-            os.mkdir(extract_folder)
-            copy_extracted_files(ext_list, unzip_folder, extract_folder)
+            copy_extracted_files(ext_list, temp_dir, extract_folder)
 
         #: Raster merging
         if merge and raster:
