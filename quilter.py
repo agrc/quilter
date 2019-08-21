@@ -155,6 +155,8 @@ def get_file_list(directory, extensions):
 def colormap_to_rgb(raster_paths, out_dir):
     '''
     Convert any color mapped files to rgb. Useful for preparing files for merging, reprojecting, etc.
+    Returns a list of paths to the rgb-converted files.
+    out_dir must continue to exist while the list of paths is used.
     '''
 
     color_map_list = []
@@ -294,12 +296,14 @@ def vector_project(vector_folder, out_dir, crs):
         dataset = None
 
 
-def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs):
+def raster_merge(raster_folder, output_location, extensions, crs):
     '''
     Merges any rasters (defined by comparing file names to extensions) in raster_folder to output_location by
     creating a vrt file at temp_vrt_path. If crs is specified, it reprojects the merged vrt via gdal.Warp();
     otherwise it translates the vrt to .tif via gdal.Translate(). crs must be in form EPSG:xxxx or ESRI:xxxx.
     '''
+
+    temp_vrt_path = r'/vsimem/temp.vrt'
 
     #: Create list of files to be (eventually) merged/projected via VRT
     vrt_list = get_file_list(raster_folder, extensions)
@@ -308,44 +312,46 @@ def raster_merge(raster_folder, output_location, temp_vrt_path, extensions, crs)
     creation_opts = set_gdal_options(vrt_list)
 
     #: Convert any color mapped files to temporary RGB for processing
-    temp_directory = os.path.split(temp_vrt_path)[0]
-    rgb_list = colormap_to_rgb(vrt_list, temp_directory)
+    # temp_directory needs to exist while the vrt is in use, as the vrt references files in rgb list, which
+    # may contain paths to rgb-convert files in temp_directory.
+    with tempfile.TemporaryDirectory() as temp_directory: 
+        rgb_list = colormap_to_rgb(vrt_list, temp_directory)
 
-    #: Build our VRT from the list of rgb-colored files
-    vrt_opts = gdal.BuildVRTOptions(resampleAlg='cubic')
-    vrt = gdal.BuildVRT(temp_vrt_path, rgb_list, options=vrt_opts)
-    vrt = None  #: releases file handle
+        #: Build our VRT from the list of rgb-colored files
+        vrt_opts = gdal.BuildVRTOptions(resampleAlg='cubic')
+        vrt = gdal.BuildVRT(temp_vrt_path, rgb_list, options=vrt_opts)
+        vrt = None  #: releases file handle
 
-    #: Project if desired
-    if crs:
-        print('\nProjecting {} to {}...'.format(output_location, crs))
-        warp_opts = gdal.WarpOptions(dstSRS=crs,
-                                     resampleAlg='cubic',
-                                     format='GTiff',
-                                     multithread=True,
-                                     creationOptions=creation_opts,
-                                     callback=gdal_progress_callback)
-        dataset = gdal.Warp(output_location, temp_vrt_path, options=warp_opts)
-        dataset = None  #: Releases file handle
+        #: Project if desired
+        if crs:
+            print('\nProjecting {} to {}...'.format(output_location, crs))
+            warp_opts = gdal.WarpOptions(dstSRS=crs,
+                                         resampleAlg='cubic',
+                                         format='GTiff',
+                                         multithread=True,
+                                         creationOptions=creation_opts,
+                                         callback=gdal_progress_callback)
+            dataset = gdal.Warp(output_location, temp_vrt_path, options=warp_opts)
+            dataset = None  #: Releases file handle
 
-        print('\nBuilding overviews...')
-        dataset = gdal.Open(output_location, gdal.GA_ReadOnly)
-        dataset.BuildOverviews('NEAREST', [2, 4, 8, 16], gdal_progress_callback)
-        dataset = None
+            print('\nBuilding overviews...')
+            dataset = gdal.Open(output_location, gdal.GA_ReadOnly)
+            dataset.BuildOverviews('NEAREST', [2, 4, 8, 16], gdal_progress_callback)
+            dataset = None
 
-    #: Otherwise, just translate vrt to tif
-    else:
-        print('\nMerging into {} ...'.format(output_location))
-        trans_opts = gdal.TranslateOptions(format='GTiff',
-                                           creationOptions=creation_opts,
-                                           callback=gdal_progress_callback)
-        dataset = gdal.Translate(output_location, temp_vrt_path, options=trans_opts)
-        dataset = None
+        #: Otherwise, just translate vrt to tif
+        else:
+            print('\nMerging into {} ...'.format(output_location))
+            trans_opts = gdal.TranslateOptions(format='GTiff',
+                                               creationOptions=creation_opts,
+                                               callback=gdal_progress_callback)
+            dataset = gdal.Translate(output_location, temp_vrt_path, options=trans_opts)
+            dataset = None
 
-        print('\nBuilding overviews...')
-        dataset = gdal.Open(output_location, gdal.GA_ReadOnly)
-        dataset.BuildOverviews('NEAREST', [2, 4, 8, 16], gdal_progress_callback)
-        dataset = None
+            print('\nBuilding overviews...')
+            dataset = gdal.Open(output_location, gdal.GA_ReadOnly)
+            dataset.BuildOverviews('NEAREST', [2, 4, 8, 16], gdal_progress_callback)
+            dataset = None
 
     #: Reset configuration options for any future runs using the same process
     gdal.SetConfigOption('COMPRESS_OVERVIEW', 'DEFLATE')
@@ -493,7 +499,6 @@ def main(args):
         #: Projected/merged file exists checks
         if merge and raster:
             raster_outpath = os.path.join(outfolder, final_name + '.tif')
-            vrt_path = os.path.join(temp_dir, final_name + str(os.getpid()) + '.vrt')
             if os.path.exists(raster_outpath):
                 raise IOError('Output file {} already exists.'.format(raster_outpath))
         
@@ -520,7 +525,7 @@ def main(args):
 
         #: Raster merging
         if merge and raster:
-            raster_merge(extract_folder, raster_outpath, vrt_path, raster_exts, projection)
+            raster_merge(extract_folder, raster_outpath, raster_exts, projection)
 
         #: Shapefile merging
         elif merge and not raster:
