@@ -436,12 +436,11 @@ def main(args):
 
     try:
 
+        #: Do our checks at the beginning so that they don't download files only to bomb out at the end
+
         #: Input sanity checks
         if not os.path.exists(csv_file):
             raise IOError('CSV file {} does not exist.'.format(csv_file))
-
-        #: set up temporary directory
-        temp_dir = tempfile.mkdtemp()
 
         #: outfile sanity checks
         if not os.path.exists(outfolder):
@@ -465,9 +464,6 @@ def main(args):
             proj_dir = os.path.join(outfolder, 'q_projected')
             if os.path.exists(extract_folder):
                 raise IOError('Projected files directory {} already exists.'.format(proj_dir))
-
-
-        #: Do these checks now so that they don't download files only to bomb out at the end
 
         #: Checks if gdal installed, proper projection code
         #: Will raise an error if gdal is not installed or CRS code not found
@@ -512,16 +508,17 @@ def main(args):
         os.mkdir(dl_folder)
         download_links(dl_links, dl_folder)
 
-        #: Unzip to temp dir
-        print('\nUnzipping files...')
-        unzip_folder = os.path.join(temp_dir, 'uz')
-        os.mkdir(unzip_folder)
-        extract_files(dl_folder, unzip_folder)
+        with tempfile.TemporaryDirectory() as temp_dir:
+            #: Unzip to temp dir
+            print('\nUnzipping files...')
+            unzip_folder = os.path.join(temp_dir, 'uz')
+            os.mkdir(unzip_folder)
+            extract_files(dl_folder, unzip_folder)
 
-        #: Copy out all relevant files to output dir
-        print('\nCopying extracted files to {}...'.format(extract_folder))
-        os.mkdir(extract_folder)
-        copy_extracted_files(ext_list, unzip_folder, extract_folder)
+            #: Copy out all relevant files to output dir
+            print('\nCopying extracted files to {}...'.format(extract_folder))
+            os.mkdir(extract_folder)
+            copy_extracted_files(ext_list, unzip_folder, extract_folder)
 
         #: Raster merging
         if merge and raster:
@@ -572,10 +569,6 @@ def main(args):
         print('Whoops, something went wrong. Any finished downloads are in {}'.format(outfolder))
         print('\nPython error message:')
         print(e)
-
-    finally:
-        #: Clean up temp directory
-        shutil.rmtree(temp_dir)
 
 
 if __name__ == '__main__':

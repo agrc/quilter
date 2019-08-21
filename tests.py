@@ -48,6 +48,7 @@ def main(args):
     #: Change the first argument as desired to test downloading only, dl + merge, and dl + reproject
     #: Second arg is list of csvs
     #: Third arg is output directory (suggest calling like: 'python tests.py .' to put in current directory)
+    #:      working directory becomes output_dir/method/csv_name/ (c:\temp\dl\10mDEMS\q_zips, etc)
     test('reproject_only', test_csvs, output_dir)
 
 if __name__ == '__main__':
