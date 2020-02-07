@@ -37,6 +37,21 @@ def download(url, filename):
     '''
     Downloades url to filename using requests, reports via progress bar
     '''
+
+    if os.path.exists(filename):
+        out_dir = os.path.dirname(filename)
+        out_name = os.path.basename(filename)
+        name = out_name.split['.'][0]
+        extension = out_name.split['.'][0]
+
+        if name[-3:-1]:
+            counter = int(name[-1])
+            counter += 1
+            out_name = name[:-1] + counter
+
+        else:
+            out_name = name + '_q1'
+
     with open(filename, 'wb') as f:
         response = requests.get(url, stream=True)
         total = response.headers.get('content-length')
